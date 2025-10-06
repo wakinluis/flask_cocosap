@@ -4,7 +4,7 @@ import sqlite3
 from datetime import datetime
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "http://localhost:3000"}})  # Allow React app
+CORS(app, resources={r"/*": {"origins": "*"}})  # Allows all origins, adjust as needed
 
 def get_db_connection():
     conn = sqlite3.connect("ispindel.db")
