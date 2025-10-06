@@ -1,6 +1,6 @@
 import sqlite3
 
-conn = sqlite3.connect("ispindel.db")
+conn = sqlite3.connect("/var/lib/mysql/ispindel.db")
 cur = conn.cursor()
 
 #Creating the table for the tuba batches
