@@ -285,6 +285,11 @@ def get_liter_chart():
 
    
     return jsonify([{"month": row["month"], "total_liters": row["total_liters"]} for row in rows])
+
+@app.route("/test", methods=["GET"])
+def test():
+    return "Server is running", 200
+
 # Start server
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)
