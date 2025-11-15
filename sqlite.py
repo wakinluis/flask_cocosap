@@ -30,8 +30,7 @@ execute("""
         battery REAL,
         angle REAL,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-        brix REAL GENERATED ALWAYS AS (((182.4601 * gravity - 775.6821) * gravity + 1262.7794) * gravity - 669.5622) STORED,
-        FOREIGN KEY (batch_id) REFERENCES batches(batch_id)
+        brix REAL GENERATED ALWAYS AS (((182.4601 * gravity - 775.6821) * gravity + 1262.7794) * gravity - 669.5622) STORED
         ) 
     """)
 
@@ -42,8 +41,7 @@ execute("""
         predicted_brix REAL,
         prediction_time TEXT,
         predicted_for_time TEXT,
-        based_on_timestamp TEXT,
-        FOREIGN KEY (batch_id) REFERENCES batches(batch_id)
+        based_on_timestamp TEXT
     )
     """)
 
