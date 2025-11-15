@@ -45,6 +45,23 @@ execute("""
     )
     """)
 
+execute("""
+    CREATE TABLE IF NOT EXISTS users (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT UNIQUE NOT NULL,
+        password_hash TEXT NOT NULL,
+    )    
+    """)
+
+execute("""
+    CREATE TABLE devices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        device_name TEXT NOT NULL,
+        api_key TEXT UNIQUE NOT NULL,
+        owner_user_id INTEGER
+    )
+    """)
+
 conn.commit()
 conn.close()
 print("Database and tables created successfully.")

@@ -3,13 +3,20 @@ from flask_cors import CORS
 import sqlite3
 from datetime import datetime
 #import tensorflow as tf
-import numpy as np
 import pandas as pd
 #import joblib
+import os
+from dotenv import load_dotenv
+import jwt
+from passlib.hash import bcrypt
+
+JWT_SECRET = os.getenv("JWT_SECRET", "supersecretjwtkey")
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Allow React app
-"""
+API_TOKEN = os.getenv("API_TOKEN")
+
+""" #-------------------------------- Model implementation --------------------------------
 model_path = "model/model_output/tuba_model_best_BiLSTM.tflite"
 feature_scaler_path = "model/model_output/feature_scalers.joblib"
 brix_scaler_path = "model/model_output/brix_scaler.joblib"
@@ -26,7 +33,9 @@ if isinstance(feature_scaler, dict):
 
 with open(threshold_path, 'r') as f:
     threshold = float(f.read().strip())
-"""
+""" #-------------------------------- End of Model implementation --------------------------------
+
+# Database connection
 def get_db_connection():
     conn = sqlite3.connect("ispindel.db")
     conn.row_factory = sqlite3.Row  # returns dict-like rows
@@ -58,6 +67,89 @@ def get_latest_data():
     df = pd.read_sql_query("SELECT gravity, brix, temperature, timestamp FROM readings ORDER BY timestamp DESC LIMIT 30;", conn)
     conn.close()
     return df
+
+# ------------------------- Authentication Helpers -------------------------
+
+def verify_jwt(token):
+    try:
+        user_data = jwt.decode(token, JWT_SECRET, algorithms=["HS256"])
+        request.user = user_data
+    except jwt.ExpiredSignatureError:
+        return jsonify({"error": "Token expired"}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({"error": "Invalid token"}), 401
+
+def verify_device_key(device_key):
+    device = get_device_by_key(device_key)
+
+    if not device:
+        return jsonify({"error": "Invalid device key"}), 401
+    
+    request.device = device
+
+def get_user_by_username(username):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM users WHERE username = ?", (username,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+def get_device_by_key(api_key):
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM devices WHERE api_key = ?",q(api_key,))
+    row = cur.fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+# Authentication middleware
+@app.before_request
+def before_request():
+    if request.path in ["/health", "/login"]:
+        return
+
+    auth_header = request.headers.get("Authorization")
+    if not auth_header:
+        return jsonify({"error": "Authorization header missing"}), 401
+    
+    # user
+    if auth_header.startswith("Bearer "):
+        token = auth_header.split(" ", 1)[1]
+        return verify_jwt(token)
+    
+    # device
+    if auth_header.startswith("Device "):
+        device_key = auth_header.split("Device ")[1]
+        return verify_device_key(device_key)
+
+    return jsonify({"error": "Unauthorized"}), 401
+
+@app.get("/health")
+def health_check():
+    return jsonify({"status": "ok"}), 200
+
+@app.post("/login")
+def login():
+    data = request.json
+    username = data.get("username")
+    password = data.get("password")
+
+    user = get_user_by_username(username) 
+
+    if not user or not bcrypt.verify(password, user["password_hash"]):
+        return jsonify({"error": "Invalid credentials"}), 401
+    token = jwt.encode(
+        {
+            "user_id": user["id"],
+            "exp": datetime.datetime.utcnow() + datetime.timedelta(hours=1)
+        },
+        JWT_SECRET,
+        algorithm="HS256"
+    )
+
+    return jsonify({"token": token})
 
 @app.route("/ispindel", methods=["POST"])
 def ispindel():
