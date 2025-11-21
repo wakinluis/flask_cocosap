@@ -21,6 +21,7 @@ execute("""
     )
     """)
 
+# Readings table
 execute("""
     CREATE TABLE IF NOT EXISTS readings (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,17 +32,17 @@ execute("""
         angle REAL,
         timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
         brix REAL GENERATED ALWAYS AS (((182.4601 * gravity - 775.6821) * gravity + 1262.7794) * gravity - 669.5622) STORED
-        ) 
+    ) 
     """)
 
+# ABV table
 execute("""
-    CREATE TABLE IF NOT EXISTS predicted_values (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        batch_id TEXT,
-        predicted_brix REAL,
-        prediction_time TEXT,
-        predicted_for_time TEXT,
-        based_on_timestamp TEXT
+    CREATE TABLE IF NOT EXISTS abv (
+        batch_id TEXT NOT NULL,
+        original_gravity REAL,
+        final_gravity REAL,
+        estimated_abv REAL,
+        current_abv REAL
     )
     """)
 
