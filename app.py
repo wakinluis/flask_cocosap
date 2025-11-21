@@ -98,7 +98,7 @@ def get_user_by_username(username):
 def get_device_by_key(api_key):
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT * FROM devices WHERE api_key = ?",q(api_key,))
+    cur.execute("SELECT * FROM devices WHERE api_key = ?", (api_key,))
     row = cur.fetchone()
     conn.close()
     return dict(row) if row else None
