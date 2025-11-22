@@ -17,7 +17,9 @@ execute("""
         start_date TEXT,
         end_date TEXT,
         liter REAL,
-        is_logging INTEGER DEFAULT 0
+        is_logging INTEGER DEFAULT 0,
+        fermentation_status INTEGER DEFAULT 0,
+        prediction_value REAL
     )
     """)
 
