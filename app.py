@@ -367,41 +367,46 @@ def update_abv(batch_id):
         "message": "ABV updated successfully."
     })
 
-@app.post("/classify")
+@app.route("/classify", methods=["POST"])
 def classify():
     conn = get_db_connection()
     cursor = conn.cursor()
+
+    # Fetch the latest reading
     cursor.execute("SELECT gravity, temperature FROM readings ORDER BY timestamp DESC LIMIT 1")
     row = cursor.fetchone()
-    
+
     if not row:
         conn.close()
         return jsonify({"error": "No data found"}), 404
-    
+
     gravity, temperature = row
     data = {"gravity": gravity, "temperature": temperature}
 
     # Forward to inference API
     try:
-        response = requests.post(INFERENCE_URL, json=data, timeout=3)
+        response = requests.post(INFERENCE_URL, json=data, timeout=10)
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         conn.close()
-        return jsonify({"error": "Inference server unavailable", "details": str(e)}), 503
+        return jsonify({
+            "error": "Inference server unavailable",
+            "details": str(e)
+        }), 503
 
     result = response.json()
     prediction_value = result.get("prediction")
-    is_ready = result.get("is_ready")
+    is_ready = result.get("is_ready", int(prediction_value <= 0.04))  # fallback if not returned
 
     # Update batches table for active logging batches
     try:
         cursor.execute(
             "UPDATE batches SET fermentation_status = ? WHERE is_logging = 1",
-            (int(is_ready),)  # assuming fermentation_status is stored as integer 0/1
+            (int(is_ready),)
         )
         cursor.execute(
             "UPDATE batches SET prediction_value = ? WHERE is_logging = 1",
-            (float(prediction_value))
+            (float(prediction_value),)
         )
         conn.commit()
     except Exception as e:
@@ -409,7 +414,8 @@ def classify():
         return jsonify({"error": "Failed to update batches", "details": str(e)}), 500
 
     conn.close()
-    # Return inference response
+
+    # Return inference response to frontend
     return jsonify(result), 200
 
 
