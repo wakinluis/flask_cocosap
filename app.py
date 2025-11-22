@@ -378,19 +378,21 @@ def classify():
 
     if not row:
         conn.close()
-        print("[DEBUG] No data found in readings table")
         return jsonify({"error": "No data found"}), 404
 
     gravity, temperature = row
     data = {"gravity": gravity, "temperature": temperature}
+
     print(f"[DEBUG] Sending data to inference server: {data}")
 
     # Forward to inference API
     try:
         response = requests.post(INFERENCE_URL, json=data, timeout=10)
+        response.raise_for_status()
         print(f"[DEBUG] Inference server responded with status code: {response.status_code}")
         print(f"[DEBUG] Raw response content: {response.text}")
-        response.raise_for_status()
+        result = response.json()
+        print(f"[DEBUG] Parsed JSON from inference: {result}")
     except requests.exceptions.RequestException as e:
         conn.close()
         print(f"[DEBUG] RequestException: {e}")
@@ -399,17 +401,20 @@ def classify():
             "details": str(e)
         }), 503
 
-    # Parse JSON
-    try:
-        result = response.json()
-        print(f"[DEBUG] Parsed JSON from inference: {result}")
-    except Exception as e:
+    # Check if prediction is available
+    if "prediction" not in result:
         conn.close()
-        print(f"[DEBUG] Failed to parse JSON: {e}")
-        return jsonify({"error": "Invalid JSON from inference", "details": str(e)}), 502
+        print("[DEBUG] Prediction not ready yet. Sequence buffer is still filling.")
+        return jsonify({
+            "status": result.get("status", "no_prediction"),
+            "received": result.get("received"),
+            "required": result.get("required"),
+            "message": "Inference server needs more data to make a prediction"
+        }), 200
 
-    prediction_value = result.get("prediction")
-    is_ready = result.get("is_ready", int(prediction_value <= 0.04))  # fallback if not returned
+    # Safe to extract prediction
+    prediction_value = result["prediction"]
+    is_ready = result.get("is_ready", int(prediction_value <= 0.04))
 
     # Update batches table for active logging batches
     try:
@@ -422,7 +427,7 @@ def classify():
             (float(prediction_value),)
         )
         conn.commit()
-        print("[DEBUG] Updated batches table with prediction")
+        print(f"[DEBUG] Updated batches table with prediction {prediction_value} and status {is_ready}")
     except Exception as e:
         conn.close()
         print(f"[DEBUG] Failed to update batches: {e}")
@@ -431,8 +436,8 @@ def classify():
     conn.close()
 
     # Return inference response to frontend
-    print("[DEBUG] Returning result to frontend")
     return jsonify(result), 200
+
 
 # Start server
 if __name__ == '__main__':
