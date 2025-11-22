@@ -139,7 +139,7 @@ def create_batch():
     # Insert batch_id to abv
     cur.execute("""
         INSERT INTO abv (batch_id, original_gravity, final_gravity, estimated_abv, current_abv)
-        VALUES (?, NULL, NULL, NULL, NULL)
+        VALUES (?, 0, 0, 0, 0)
     """, (next_batch_id,))
 
     conn.commit()
