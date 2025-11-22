@@ -6,11 +6,15 @@ import numpy as np
 import pandas as pd
 import requests
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
+INFERENCE_URL = os.getenv("INFERENCE_URL")
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Allow React app
 
-INFERENCE_URL = os.getenv("INFERENCE_URL")
+
 
 def get_db_connection():
     conn = sqlite3.connect("ispindel.db")
