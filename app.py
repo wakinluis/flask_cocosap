@@ -378,23 +378,36 @@ def classify():
 
     if not row:
         conn.close()
+        print("[DEBUG] No data found in readings table")
         return jsonify({"error": "No data found"}), 404
 
     gravity, temperature = row
     data = {"gravity": gravity, "temperature": temperature}
+    print(f"[DEBUG] Sending data to inference server: {data}")
 
     # Forward to inference API
     try:
         response = requests.post(INFERENCE_URL, json=data, timeout=10)
+        print(f"[DEBUG] Inference server responded with status code: {response.status_code}")
+        print(f"[DEBUG] Raw response content: {response.text}")
         response.raise_for_status()
     except requests.exceptions.RequestException as e:
         conn.close()
+        print(f"[DEBUG] RequestException: {e}")
         return jsonify({
             "error": "Inference server unavailable",
             "details": str(e)
         }), 503
 
-    result = response.json()
+    # Parse JSON
+    try:
+        result = response.json()
+        print(f"[DEBUG] Parsed JSON from inference: {result}")
+    except Exception as e:
+        conn.close()
+        print(f"[DEBUG] Failed to parse JSON: {e}")
+        return jsonify({"error": "Invalid JSON from inference", "details": str(e)}), 502
+
     prediction_value = result.get("prediction")
     is_ready = result.get("is_ready", int(prediction_value <= 0.04))  # fallback if not returned
 
@@ -409,15 +422,17 @@ def classify():
             (float(prediction_value),)
         )
         conn.commit()
+        print("[DEBUG] Updated batches table with prediction")
     except Exception as e:
         conn.close()
+        print(f"[DEBUG] Failed to update batches: {e}")
         return jsonify({"error": "Failed to update batches", "details": str(e)}), 500
 
     conn.close()
 
     # Return inference response to frontend
+    print("[DEBUG] Returning result to frontend")
     return jsonify(result), 200
-
 
 # Start server
 if __name__ == '__main__':
