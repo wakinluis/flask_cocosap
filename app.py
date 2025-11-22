@@ -2,13 +2,15 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 import sqlite3
 from datetime import datetime
-#import tensorflow as tf
 import numpy as np
 import pandas as pd
-#import joblib
+import requests
+import os
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Allow React app
+
+INFERENCE_URL = os.getenv("INFERENCE_URL")
 
 def get_db_connection():
     conn = sqlite3.connect("ispindel.db")
@@ -37,15 +39,6 @@ def get_next_batch_id():
 
 # iSpindel logging
 latest_reading = None  # keep in memory preview of latest reading
-
-# Fetch latest 50 readings for input of BiLSTM model
-def get_latest_data():
-    conn = sqlite3.connect("ispindel.db")
-    df = pd.read_sql_query("SELECT gravity, brix, temperature, timestamp FROM readings ORDER BY timestamp DESC LIMIT 30;", conn)
-    conn.close()
-    return df
-
-
 
 @app.route("/ispindel", methods=["POST"])
 def ispindel():
@@ -369,6 +362,30 @@ def update_abv(batch_id):
         "current_abv": current_abv,
         "message": "ABV updated successfully."
     })
+
+@app.post("/classify")
+def classify():
+
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT gravity, temperature FROM readings ORDER BY timestamp DESC LIMIT 1")
+    row = cursor.fetchone()
+    conn.close()
+    
+    if not row:
+        return jsonify({"error": "No data found"}), 404
+    
+    gravity, temperature = row
+    data = {"gravity": gravity, "temperature": temperature}
+
+    # Forward to inference API
+    try:
+        response = requests.post(INFERENCE_URL, json=data, timeout=3)
+        response.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        return jsonify({"error": "Inference server unavailable", "details": str(e)}), 503
+
+    return jsonify(response.json()), 200
 
 # Start server
 if __name__ == '__main__':
