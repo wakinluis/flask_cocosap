@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 INFERENCE_URL = os.getenv("INFERENCE_URL")
+SEQUENCE_LENGTH = 30  # must match inference server
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})  # Allow React app
@@ -387,7 +388,7 @@ def classify():
 
     # Forward to inference API
     try:
-        response = requests.post(INFERENCE_URL, json=data, timeout=10)
+        response = requests.post(f"{INFERENCE_URL}/predict", json=data, timeout=10)
         response.raise_for_status()
         print(f"[DEBUG] Inference server responded with status code: {response.status_code}")
         print(f"[DEBUG] Raw response content: {response.text}")
@@ -438,7 +439,7 @@ def classify():
     # Return inference response to frontend
     return jsonify(result), 200
 
-SEQUENCE_LENGTH = 30  # must match inference server
+
 
 @app.route("/rerun", methods=["POST"])
 def rerun_inference():
