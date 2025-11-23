@@ -268,7 +268,7 @@ def get_batches_list():
     cur = conn.cursor()
 
     cur.execute("""
-        SELECT batch_id, start_date, end_date, liter, is_logging
+        SELECT batch_id, start_date, end_date, liter, is_logging, fermentation_status, prediction_value
         FROM batches
         ORDER BY id DESC
     """)
@@ -282,7 +282,8 @@ def get_batches_list():
             "endDate": row["end_date"],
             "liter": row["liter"],
             "is_logging": row["is_logging"],
-            #  brix, ph, alcohol, etc. is not yet reflected, TBA
+            "fermentation_status": row["fermentation_status"],
+            "prediction_value": row["prediction_value"]
         })
 
     conn.close()
