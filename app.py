@@ -373,17 +373,26 @@ def classify():
     cursor = conn.cursor()
 
     # Fetch the latest reading
-    cursor.execute("SELECT gravity, temperature FROM readings ORDER BY timestamp DESC LIMIT 1")
+    cursor.execute("SELECT id, gravity, temperature, timestamp FROM readings ORDER BY timestamp DESC LIMIT 1")
     row = cursor.fetchone()
 
     if not row:
         conn.close()
         return jsonify({"error": "No data found"}), 404
 
-    gravity, temperature = row
+    reading_id, gravity, temperature, latest_ts = row
     data = {"gravity": gravity, "temperature": temperature}
 
     print(f"[DEBUG] Sending data to inference server: {data}")
+
+    # Prevent duplicate requests for the same reading
+    last_ts_checked = app.config.get("LAST_READING_TS", 0)
+    if latest_ts <= last_ts_checked:
+        conn.close()
+        print("[DEBUG] No new readings since last classify request. Skipping inference.")
+        return jsonify({"status": "no_new_data"}), 200
+
+    app.config["LAST_READING_TS"] = latest_ts
 
     # Forward to inference API
     try:
@@ -401,12 +410,12 @@ def classify():
             "details": str(e)
         }), 503
 
-    # Check if prediction is available
+    # Check if the model has a valid prediction
     if "prediction" not in result:
         conn.close()
         print("[DEBUG] Prediction not ready yet. Sequence buffer is still filling.")
         return jsonify({
-            "status": result.get("status", "no_prediction"),
+            "status": result.get("status", "waiting_for_sequence"),
             "received": result.get("received"),
             "required": result.get("required"),
             "message": "Inference server needs more data to make a prediction"
@@ -414,17 +423,13 @@ def classify():
 
     # Safe to extract prediction
     prediction_value = result["prediction"]
-    is_ready = result.get("is_ready", int(prediction_value <= 0.04))
+    is_ready = result.get("is_ready", 0)  # default 0 if not returned
 
     # Update batches table for active logging batches
     try:
         cursor.execute(
-            "UPDATE batches SET fermentation_status = ? WHERE is_logging = 1",
-            (int(is_ready),)
-        )
-        cursor.execute(
-            "UPDATE batches SET prediction_value = ? WHERE is_logging = 1",
-            (float(prediction_value),)
+            "UPDATE batches SET fermentation_status = ?, prediction_value = ? WHERE is_logging = 1",
+            (int(is_ready), float(prediction_value))
         )
         conn.commit()
         print(f"[DEBUG] Updated batches table with prediction {prediction_value} and status {is_ready}")
