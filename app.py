@@ -372,32 +372,17 @@ def classify():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Fetch the latest reading with timestamp
-    cursor.execute("SELECT id, gravity, temperature, timestamp FROM readings ORDER BY timestamp DESC LIMIT 1")
+    # Fetch the latest reading
+    cursor.execute("SELECT gravity, temperature FROM readings ORDER BY timestamp DESC LIMIT 1")
     row = cursor.fetchone()
 
     if not row:
         conn.close()
         return jsonify({"error": "No data found"}), 404
 
-    reading_id, gravity, temperature, latest_ts_raw = row
-    try:
-        latest_ts = int(latest_ts_raw)  # Ensure timestamp is int
-    except ValueError:
-        conn.close()
-        return jsonify({"error": "Invalid timestamp in database"}), 500
-
-    # Check if this reading has already been processed
-    last_ts_checked = app.config.get("LAST_READING_TS", 0)
-    if latest_ts <= last_ts_checked:
-        conn.close()
-        print("[DEBUG] No new readings since last classify request. Skipping inference.")
-        return jsonify({"status": "no_new_data"}), 200
-
-    # Update last processed timestamp
-    app.config["LAST_READING_TS"] = latest_ts
-
+    gravity, temperature = row
     data = {"gravity": gravity, "temperature": temperature}
+
     print(f"[DEBUG] Sending data to inference server: {data}")
 
     # Forward to inference API
@@ -429,7 +414,7 @@ def classify():
 
     # Safe to extract prediction
     prediction_value = result["prediction"]
-    is_ready = result.get("is_ready", int(prediction_value >= 0.5))
+    is_ready = result.get("is_ready", int(prediction_value <= 0.04))
 
     # Update batches table for active logging batches
     try:
