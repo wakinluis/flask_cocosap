@@ -183,35 +183,51 @@ def check_connection(batch_id):
 def next_batch_id():
     return jsonify({"next_batch_id": get_next_batch_id()})
 
-@app.route("/latest_readings", methods=["GET"])
-def latest_readings():
+@app.route("/get_latest_reading/<batch_id>", methods=["GET"])
+def get_latest_reading(batch_id):
     conn = get_db_connection()
     cur = conn.cursor()
 
     # Get latest row from readings
     cur.execute("""
-        SELECT angle, gravity, brix, temperature
+        SELECT angle, gravity, brix, temperature, battery,
         FROM readings
+        WHERE batch id = ?
         ORDER BY timestamp DESC
         LIMIT 1
-    """)
+    """, (batch_id,))
     row = cur.fetchone()
+
+    cur.execute("""
+        SELECT current_abv
+        FROM abv
+        WHERE batch_id = ?
+    """, (batch_id,))
+    row2 = cur.fetchone()
+    conn.close()
 
     # Get next batch id from 'id'
     next_batch_id = get_next_batch_id()
 
     if row:
-        angle, gravity, brix, temperature = row
+        angle, gravity, brix, temperature, battery = row
     else:
         # No readings yet → send empty values
-        angle = gravity = brix = temperature = None
+        angle = gravity = brix = temperature = battery = None
+
+    if row2:
+        current_abv = row
+    else:
+        current_abv = None
 
     return jsonify({
         "batch_id": next_batch_id,
         "angle": angle,
-        "sg": gravity,
+        "gravity": gravity,
         "brix": brix,
-        "temperature": temperature
+        "temperature": temperature,
+        "battery": battery,
+        "current_abv": current_abv
     })
 
 @app.route("/active_batch", methods=["GET"])
