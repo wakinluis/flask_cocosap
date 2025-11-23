@@ -372,7 +372,7 @@ def classify():
     conn = get_db_connection()
     cursor = conn.cursor()
 
-    # Fetch the latest reading
+    # Fetch the latest reading with timestamp
     cursor.execute("SELECT id, gravity, temperature, timestamp FROM readings ORDER BY timestamp DESC LIMIT 1")
     row = cursor.fetchone()
 
@@ -380,19 +380,25 @@ def classify():
         conn.close()
         return jsonify({"error": "No data found"}), 404
 
-    reading_id, gravity, temperature, latest_ts = row
-    data = {"gravity": gravity, "temperature": temperature}
+    reading_id, gravity, temperature, latest_ts_raw = row
+    try:
+        latest_ts = int(latest_ts_raw)  # Ensure timestamp is int
+    except ValueError:
+        conn.close()
+        return jsonify({"error": "Invalid timestamp in database"}), 500
 
-    print(f"[DEBUG] Sending data to inference server: {data}")
-
-    # Prevent duplicate requests for the same reading
+    # Check if this reading has already been processed
     last_ts_checked = app.config.get("LAST_READING_TS", 0)
     if latest_ts <= last_ts_checked:
         conn.close()
         print("[DEBUG] No new readings since last classify request. Skipping inference.")
         return jsonify({"status": "no_new_data"}), 200
 
+    # Update last processed timestamp
     app.config["LAST_READING_TS"] = latest_ts
+
+    data = {"gravity": gravity, "temperature": temperature}
+    print(f"[DEBUG] Sending data to inference server: {data}")
 
     # Forward to inference API
     try:
@@ -410,12 +416,12 @@ def classify():
             "details": str(e)
         }), 503
 
-    # Check if the model has a valid prediction
+    # Check if prediction is available
     if "prediction" not in result:
         conn.close()
         print("[DEBUG] Prediction not ready yet. Sequence buffer is still filling.")
         return jsonify({
-            "status": result.get("status", "waiting_for_sequence"),
+            "status": result.get("status", "no_prediction"),
             "received": result.get("received"),
             "required": result.get("required"),
             "message": "Inference server needs more data to make a prediction"
@@ -423,13 +429,17 @@ def classify():
 
     # Safe to extract prediction
     prediction_value = result["prediction"]
-    is_ready = result.get("is_ready", 0)  # default 0 if not returned
+    is_ready = result.get("is_ready", int(prediction_value >= 0.5))
 
     # Update batches table for active logging batches
     try:
         cursor.execute(
-            "UPDATE batches SET fermentation_status = ?, prediction_value = ? WHERE is_logging = 1",
-            (int(is_ready), float(prediction_value))
+            "UPDATE batches SET fermentation_status = ? WHERE is_logging = 1",
+            (int(is_ready),)
+        )
+        cursor.execute(
+            "UPDATE batches SET prediction_value = ? WHERE is_logging = 1",
+            (float(prediction_value),)
         )
         conn.commit()
         print(f"[DEBUG] Updated batches table with prediction {prediction_value} and status {is_ready}")
@@ -442,7 +452,6 @@ def classify():
 
     # Return inference response to frontend
     return jsonify(result), 200
-
 
 # Start server
 if __name__ == '__main__':
