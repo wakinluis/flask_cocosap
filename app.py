@@ -438,6 +438,61 @@ def classify():
     # Return inference response to frontend
     return jsonify(result), 200
 
+SEQUENCE_LENGTH = 30  # must match inference server
+
+@app.route("/rerun", methods=["POST"])
+def rerun_inference():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+
+    # 1. Fetch up to last 30 readings
+    cursor.execute("""
+        SELECT gravity, temperature
+        FROM readings
+        ORDER BY timestamp DESC
+        LIMIT ?
+    """, (SEQUENCE_LENGTH,))
+    
+    rows = cursor.fetchall()
+    conn.close()
+
+    if not rows:
+        return jsonify({"error": "No readings available"}), 404
+
+    # Reverse so oldest gets pushed first
+    readings = list(reversed(rows))
+
+    # 2. Reset inference buffer
+    try:
+        reset_res = requests.post(f"{INFERENCE_URL}/reset", timeout=10)
+        reset_res.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        return jsonify({
+            "error": "Failed to reset inference buffer",
+            "details": str(e)
+        }), 503
+
+    pushed = 0
+
+    # 3. Replay historical readings into inference server
+    for g, t in readings:
+        try:
+            requests.post(f"{INFERENCE_URL}/predict",
+                          json={"gravity": g, "temperature": t},
+                          timeout=10)
+            pushed += 1
+        except requests.exceptions.RequestException:
+            # continue feeding even if one fails
+            continue
+
+    return jsonify({
+        "status": "rerun_started",
+        "pushed_readings": pushed,
+        "required_sequence": SEQUENCE_LENGTH,
+        "waiting_for_more": pushed < SEQUENCE_LENGTH
+    }), 200
+
+
 # Start server
 if __name__ == '__main__':
     app.run(host="0.0.0.0", port=5000)
