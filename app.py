@@ -190,9 +190,9 @@ def get_latest_reading(batch_id):
 
     # Get latest row from readings
     cur.execute("""
-        SELECT angle, gravity, brix, temperature, battery,
+        SELECT angle, gravity, brix, temperature, battery
         FROM readings
-        WHERE batch id = ?
+        WHERE batch_id = ?
         ORDER BY timestamp DESC
         LIMIT 1
     """, (batch_id,))
@@ -206,22 +206,15 @@ def get_latest_reading(batch_id):
     row2 = cur.fetchone()
     conn.close()
 
-    # Get next batch id from 'id'
-    next_batch_id = get_next_batch_id()
-
     if row:
         angle, gravity, brix, temperature, battery = row
     else:
         # No readings yet → send empty values
         angle = gravity = brix = temperature = battery = None
 
-    if row2:
-        current_abv = row
-    else:
-        current_abv = None
+    current_abv = row2[0] if row2 else None
 
     return jsonify({
-        "batch_id": next_batch_id,
         "angle": angle,
         "gravity": gravity,
         "brix": brix,
