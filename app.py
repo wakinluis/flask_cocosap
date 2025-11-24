@@ -243,7 +243,7 @@ def active_batches():
     conn = get_db_connection()
     cur = conn.cursor()
     cur.execute("""
-        SELECT batch_id, start_date, end_date
+        SELECT batch_id, start_date, end_date, fermentation_status, prediction_value
         FROM batches
         WHERE is_logging = 1
     """)
@@ -254,7 +254,9 @@ def active_batches():
     return jsonify([{
         "id": row["batch_id"],
         "startDate": row["start_date"],
-        "endDate": row["end_date"]
+        "endDate": row["end_date"],
+        "fermentation_status": row["fermentation_status"],
+        "prediction_value": row["prediction_value"]
     } for row in rows])
 
 
