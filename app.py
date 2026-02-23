@@ -7,6 +7,9 @@ import pandas as pd
 import requests
 import os
 from dotenv import load_dotenv
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 load_dotenv()
 INFERENCE_URL = os.getenv("INFERENCE_URL")
@@ -504,6 +507,51 @@ def rerun_inference():
         "required_sequence": SEQUENCE_LENGTH,
         "waiting_for_more": pushed < SEQUENCE_LENGTH
     }), 200
+
+@app.route("/notify_completion", methods=["POST"])
+def notify_completion():
+    data = request.get_json(force=True)
+    batch_id = data.get("batch_id", "Unknown")
+
+    # Email config — set these as environment variables or edit directly for local testing
+    smtp_host     = os.environ.get("SMTP_HOST", "smtp.gmail.com")
+    smtp_port     = int(os.environ.get("SMTP_PORT", 587))
+    smtp_user     = os.environ.get("SMTP_USER", "")      # e.g. yourapp@gmail.com
+    smtp_password = os.environ.get("SMTP_PASSWORD", "")  # App password
+    notify_email  = os.environ.get("NOTIFY_EMAIL", smtp_user)  # recipient
+
+    if not smtp_user or not smtp_password:
+        print(f"[notify_completion] Email credentials not set — skipping send for batch {batch_id}")
+        return jsonify({"status": "skipped", "reason": "email credentials not configured"}), 200
+
+    subject = f"Fermentation Complete — Batch {batch_id}"
+    body = (
+        f"Hello,\n\n"
+        f"Batch {batch_id} has completed fermentation.\n"
+        f"The Brix level has reached ≤ 1°Bx, indicating the coconut sap is ready.\n\n"
+        f"Please check the Fermentation Monitoring dashboard for the final readings.\n\n"
+        f"— Coconut Sap Fermentation System"
+    )
+
+    try:
+        msg = MIMEMultipart()
+        msg["From"]    = smtp_user
+        msg["To"]      = notify_email
+        msg["Subject"] = subject
+        msg.attach(MIMEText(body, "plain"))
+
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.sendmail(smtp_user, notify_email, msg.as_string())
+
+        print(f"[notify_completion] Email sent for batch {batch_id} to {notify_email}")
+        return jsonify({"status": "sent", "batch_id": batch_id})
+
+    except Exception as e:
+        print(f"[notify_completion] Email failed: {e}")
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 
 
 # Start server
