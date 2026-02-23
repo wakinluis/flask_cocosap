@@ -508,7 +508,7 @@ def rerun_inference():
         "waiting_for_more": pushed < SEQUENCE_LENGTH
     }), 200
 
-@app.route("/notify_completion", methods=["POST"])
+@app.route("/notify_completion", methods=["POST, OPTIONS"])
 def notify_completion():
     data = request.get_json(force=True)
     batch_id = data.get("batch_id", "Unknown")
@@ -551,8 +551,6 @@ def notify_completion():
     except Exception as e:
         print(f"[notify_completion] Email failed: {e}")
         return jsonify({"status": "error", "message": str(e)}), 500
-
-
 
 # Start server
 if __name__ == '__main__':
