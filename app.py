@@ -508,7 +508,7 @@ def rerun_inference():
         "waiting_for_more": pushed < SEQUENCE_LENGTH
     }), 200
 
-@app.route("/notify_completion", methods=["POST, OPTIONS"])
+@app.route("/notify_completion", methods=["POST"])
 def notify_completion():
     data = request.get_json(force=True)
     batch_id = data.get("batch_id", "Unknown")
